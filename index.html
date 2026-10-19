@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bảng xếp hạng – Đề thi câu bị động</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef1f6;color:#1c2430;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 14px 60px}
+h1{font-size:28px;margin:0 0 4px}
+.sub{color:#5d6877;margin:0 0 18px;font-size:14px}
+.bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+button{font:600 14px system-ui,sans-serif;background:#16329a;color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
+select{font:14px system-ui,sans-serif;padding:8px;border-radius:8px;border:1px solid #c5ccd8}
+.box{background:#fff;border-radius:12px;box-shadow:0 4px 18px -8px rgba(20,30,60,.3);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th,td{padding:11px 12px;text-align:left;border-bottom:1px solid #e6e9ef;font-size:15px}
+th{background:#f6f8fb;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5d6877}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.t1 td{background:#fff7d6}tr.t2 td{background:#f1f3f6}tr.t3 td{background:#fbeede}
+.rk{font-weight:700;width:52px}
+.sc{font-weight:700;color:#16329a}
+.msg{padding:26px;text-align:center;color:#5d6877}
+@media(max-width:520px){th,td{padding:9px 6px;font-size:14px}.hm{display:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>🏆 Bảng xếp hạng</h1>
+<p class="sub">Xếp theo điểm cao nhất, bằng điểm thì ai làm nhanh hơn xếp trên. Mỗi bạn chỉ tính lần làm tốt nhất. Tự cập nhật mỗi 30 giây.</p>
+<div class="bar">
+<button id="rf">↻ Làm mới</button>
+<select id="cls" aria-label="Lọc theo lớp"><option value="">Tất cả các lớp</option></select>
+<span id="st" class="sub" style="margin:0"></span>
+</div>
+<div class="box"><div id="out" class="msg">Đang tải...</div></div>
+</main>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getFirestore,collection,getDocs,query,orderBy,limit} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const db=getFirestore(initializeApp({
+  apiKey:"AIzaSyCL6EwjUy5RDiRbaYa1pxSoNhm-EJMm_iY",
+  authDomain:"dethitienganh-c368d.firebaseapp.com",
+  projectId:"dethitienganh-c368d",
+  storageBucket:"dethitienganh-c368d.firebasestorage.app",
+  messagingSenderId:"781348456572",
+  appId:"1:781348456572:web:bf7003310e847cebe8e1f9"
+}));
+const $=id=>document.getElementById(id);
+const esc=t=>String(t||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let rows=[];
+const fmt=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+function draw(){
+  const c=$("cls").value;
+  const list=rows.filter(r=>!c||r.cls===c).slice(0,50);
+  if(!list.length){$("out").className="msg";$("out").textContent="Chưa có bài nộp nào.";return;}
+  $("out").className="";
+  $("out").innerHTML='<table><thead><tr><th>Hạng</th><th>Họ tên</th><th class="hm">Lớp</th><th class="n">Điểm</th><th class="n hm">Đúng</th><th class="n">Thời gian</th></tr></thead><tbody>'+
+   list.map((r,i)=>'<tr class="'+(i<3?"t"+(i+1):"")+'"><td class="rk">'+(["🥇","🥈","🥉"][i]||i+1)+'</td><td>'+esc(r.name)+'</td><td class="hm">'+esc(r.cls)+'</td><td class="n sc">'+r.score.toFixed(1)+'</td><td class="n hm">'+r.correct+'/50</td><td class="n">'+fmt(r.used)+'</td></tr>').join("")+"</tbody></table>";
+}
+async function load(){
+  $("st").textContent="Đang tải...";
+  try{
+    const snap=await getDocs(query(collection(db,"leaderboard"),orderBy("score","desc"),limit(300)));
+    const best={};
+    snap.forEach(d=>{
+      const x=d.data(),used=3600-(x.timeLeft||0),k=(x.name||"").toLowerCase()+"|"+(x.cls||"").toLowerCase();
+      const r={name:x.name,cls:x.cls||"",score:x.score,correct:x.correct,used};
+      const b=best[k];
+      if(!b||r.score>b.score||(r.score===b.score&&r.used<b.used))best[k]=r;
+    });
+    rows=Object.values(best).sort((a,b)=>b.score-a.score||a.used-b.used);
+    const cur=$("cls").value,cs=[...new Set(rows.map(r=>r.cls).filter(Boolean))].sort();
+    $("cls").innerHTML='<option value="">Tất cả các lớp</option>'+cs.map(c=>'<option>'+esc(c)+'</option>').join("");
+    $("cls").value=cs.includes(cur)?cur:"";
+    draw();$("st").textContent="Cập nhật "+new Date().toLocaleTimeString("vi-VN");
+  }catch(e){console.error(e);$("out").className="msg";$("out").textContent="Không tải được bảng xếp hạng. Kiểm tra mạng và Rules của Firestore.";$("st").textContent="";}
+}
+$("rf").onclick=load;$("cls").onchange=draw;
+load();setInterval(load,30000);
+</script>
+</body>
+</html>
